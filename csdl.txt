@@ -1,0 +1,37 @@
+{
+   _id: User_ID
+   user_name: Text, 
+   phone: USER_PHONE,
+   password: USER_PASSWORD,
+   email: USER_EMAIL,
+   image: USER_IMAGE,
+   sex: USER_SEX, 
+   birthday: 'USER_DATE',
+
+   Friends: [	
+      {
+         id: FRIEND_ID,
+         friend's_name: TEXT,
+         friend's_image: 'FRIEND_IMAGE',
+      },
+      {
+         id: FRIEND_ID,
+         friend's_name: TEXT,
+         friend's_image: 'FRIEND_IMAGE',
+      }
+   ]
+
+   User's_Message: [  
+      {
+         message_id         : MESSAGE_ID,
+         txt_mes's_usr      : TEXT,
+         txt_mes's_friend   : 'FRIEND_IMAGE',
+         time               : DATE_TIME
+      },
+      {
+         id: FRIEND_ID,
+         friend's_name: TEXT,
+         friend's_image: 'FRIEND_IMAGE',
+      }
+   ]
+}
