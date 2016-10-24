@@ -7,8 +7,8 @@ var mongodb = require('mongodb');
  
 var MongoClient = mongodb.MongoClient;
 var url = 'mongodb://localhost:27017/simchat';
- 
- var i =0;
+var numUsers = 0;
+var i =0;
 MongoClient.connect(url, function (err, db) {
   if (err) {
     console.log('Unable to connect to the mongoDB server. Error:', err);
@@ -16,7 +16,7 @@ MongoClient.connect(url, function (err, db) {
     //HURRAY!! We are connected. :)
     console.log('Connection established to', url);
 
-    collection = db.collection("usrlogin");
+    collection = db.collection("usrcl");
   }
 });
  
@@ -28,6 +28,7 @@ app.get('/', function (req, res){
  
  
 io.on('connection', function (socket) {
+  var addedUser = false;
   socket.on('login', function (phone, password) {
     console.log(phone + " login");
  
@@ -54,6 +55,9 @@ io.on('connection', function (socket) {
                 //  });
                  
 
+
+
+
                   cursor1.toArray(function(err, documents) {
 
                     socket.emit('login', true , documents);
@@ -74,7 +78,7 @@ io.on('connection', function (socket) {
   socket.on('register', function (phone1, password1, usr_name1 ) {
     console.log(usr_name1 + " register");
  
-    var user = {usr_name: usr_name1, password: password1, phone: phone1 };
+    var user = {usr_name: usr_name1, password: password1, phone: phone1};
 
 
 
@@ -85,9 +89,11 @@ io.on('connection', function (socket) {
                      socket.emit('register', false);
                   } else {
                       console.log('them vao db thanh cong 1');
-                      socket.broadcast.emit('register1', {"tf":"true", "user":{usr_name: usr_name1, password: password1, phone: phone1}});
                       socket.emit('register', true);
+                      socket.broadcast.emit('register1', {"tf":"true", "user":{usr_name: usr_name1, password: password1, phone: phone1}});
+                      
                   }
+                  
                   });
 
   });
@@ -95,8 +101,110 @@ io.on('connection', function (socket) {
 
 
 
-  
+ socket.on('add user', function (username, bind_friend) {
+    if (addedUser) return;
+    socket.bind_friend = bind_friend;
+    socket.join(socket.bind_friend);
+    console.log(username + " login to chat");
+    console.log("hello couple: " + socket.bind_friend);
+    // we store the username in the socket session for this client
+    socket.username = username;
+    ++numUsers;
+    if(numUsers == 2 ){
+      numUsers = 2;
+    }
+    addedUser = true;
+
+    // socket.emit('login1', {
+    //   numUsers: numUsers
+    // });
+
+    // echo globally (all clients) that a person has connected
     
+    socket.broadcast.to(socket.bind_friend).emit('user joined', {
+      username: socket.username,
+      string: socket.bind_friend,
+      numUsers: numUsers
+    });
+
+
+// socket.broadcast.to('3rRUbiVtOIN8KkBoAAAA').emit(
+//   'message', 
+//   'for your eyes only'
+//   );
+
+  // io.sockets.socket(socket.id).emit('user joined', {
+  //     username: socket.username,
+  //     numUsers: numUsers
+  //   });
+  });
+ 
+
+
+
+socket.on('typing', function () {
+
+    socket.broadcast.to(socket.bind_friend).emit('typing', {
+   
+      username: socket.username
+   
+    });
+
+  });
+
+
+
+ socket.on('stop typing', function () {
+
+    socket.broadcast.to(socket.bind_friend).emit('stop typing', {
+      username: socket.username
+    });
+    
+  });
+
+
+socket.on('disconnect', function () {
+    if (addedUser) {
+      --numUsers;
+ 
+      // echo globally that this client has left
+      socket.broadcast.emit('user left', {
+        username: socket.username,
+        numUsers: numUsers
+      });
+    }
+  });
+
+  socket.on("new message",function (data, id_couple) {
+
+    // socket.id_couple = id_couple;
+     console.log("message from "+ socket.bind_friend);
+    // socket.join(socket.id_couple);
+  socket.broadcast.to(socket.bind_friend).emit('new message', {
+        username : socket.username,
+        message: data
+      });
+
+
+
+      // socket.broadcast.emit("new message",{
+      //     username : socket.username,
+      //     message: data
+      // }); 
+  });
+  
+
+  // socket.on('disconnect', function () {
+  //   if (addedUser) {
+  //     --numUsers;
+  
+  //     // echo globally that this client has left
+  //     socket.broadcast.emit('user left', {
+  //       username: socket.username,
+  //       numUsers: numUsers
+  //     });
+  //   }
+  // });
 
            
  
