@@ -54,10 +54,6 @@ io.on('connection', function (socket) {
                   
                 //  });
                  
-
-
-
-
                   cursor1.toArray(function(err, documents) {
 
                     socket.emit('login', true , documents);
@@ -75,12 +71,12 @@ io.on('connection', function (socket) {
  
   });
  
-  socket.on('register', function (phone1, password1, usr_name1 ) {
+  socket.on('register', function (phone1, password1, usr_name1,  messageArr1) {
     console.log(usr_name1 + " register");
  
-    var user = {usr_name: usr_name1, password: password1, phone: phone1};
+    var user = {usr_name: usr_name1, password: password1, phone: phone1 , message_usr_arr : []};
 
-
+// message_usr_arr: [{name_user : name_user1 , user_message : user_message1}]
 
 
                 collection.insert(user, function (err, result) {
@@ -99,7 +95,7 @@ io.on('connection', function (socket) {
   });
   
 
-
+  
 
  socket.on('add user', function (username, bind_friend) {
     if (addedUser) return;
@@ -139,7 +135,25 @@ io.on('connection', function (socket) {
   //   });
   });
  
+socket.on('update_message', function (username1, message1){
 
+      collection.update({usr_name : socket.username},{$push:{message_usr_arr:{usrname: username1 , message: message1}}}, function(err, result){
+        
+         if (err) {
+                     console.log(err);
+                     // socket.emit('update_message', false);
+                     console.log('update that bai');
+                  }else{
+                    var cursor2 = collection.find();
+                    console.log('update thanh cong');
+                    cursor2.toArray(function(err, documents) {
+                      console.log('emit thanh cong');
+                    socket.emit("on_emit_message", documents);
+                  });
+                    
+                  }
+      });
+  });
 
 
 socket.on('typing', function () {
@@ -175,7 +189,7 @@ socket.on('disconnect', function () {
     }
   });
 
-  socket.on("new message",function (data, id_couple) {
+  socket.on("new message",function (data) {
 
     // socket.id_couple = id_couple;
      console.log("message from "+ socket.bind_friend);
@@ -185,14 +199,15 @@ socket.on('disconnect', function () {
         message: data
       });
 
-
-
       // socket.broadcast.emit("new message",{
       //     username : socket.username,
       //     message: data
       // }); 
   });
   
+
+
+
 
   // socket.on('disconnect', function () {
   //   if (addedUser) {
