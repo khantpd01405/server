@@ -5,6 +5,7 @@ var http = require('http').Server(app);
 var io = require('socket.io')(http);
 var mongodb = require('mongodb');
  var async = require("async");
+ var fs = require("fs");
 var MongoClient = mongodb.MongoClient;
 var url = 'mongodb://localhost:27017/simchat';
 var numUsers = 0;
@@ -36,21 +37,32 @@ io.on('connection', function (socket) {
   var addedUser = false;
   socket.on('login', function (phone, password) {
     
-    
- 
+     
     var cursor = collection.find({phone:phone});
     var cursor1 = collection.find();
 
     async.series([
         function(callback){
                 cursor.each(function (err, doc) {
-
+                
             if (err) {
               console.log(err);
               socket.emit('login', false);
             } else {
                if(doc != null){
+                socket.username = doc.usr_name;
                    if(doc.password == password){
+                        socket.phone = phone;
+                        collection.update({"phone" : socket.phone},{$set:{"status":true}}, function(err, result){
+        
+                           if (err) {
+                                       console.log(err);
+                                       console.log('update that bai');
+                                    }else{
+                                      
+                                    }
+                        });
+
                         log = true;
 
                    }else{
@@ -58,9 +70,6 @@ io.on('connection', function (socket) {
                    }
                    log1 = true;
                    callback(null,1);
-               }
-               else{
-                  log1 = false;
                }
                callback(null,1);
             }
@@ -96,18 +105,20 @@ io.on('connection', function (socket) {
          
         }
       ]);
-
-
-
-    
-
-   
   });
  
-  socket.on('register', function (phone1, password1, usr_name1,  messageArr1) {
+
+socket.on('user online', function(object){
+    console.log(object);
+
+    socket.broadcast.emit("user online", object);
+});
+
+
+  socket.on('register', function (phone1, password1, usr_name1, status1,  messageArr1) {
     
     
-    var user = {usr_name: usr_name1, password: password1, phone: phone1 , message_usr_arr : []};
+    var user = {usr_name: usr_name1, password: password1, phone: phone1 , status: status1, message_usr_arr : []};
 
 
     var cursor = collection.find({phone:phone1});
@@ -121,13 +132,14 @@ io.on('connection', function (socket) {
                          
                       } else {
                          if(doc == null){
-                          callback(null,1);
+                          
                           used = true;
                           
                          }else{
                           used = false;
                             
                          }
+                         callback(null,1);
                       } 
                      
                     });
@@ -145,7 +157,7 @@ io.on('connection', function (socket) {
                                   console.log(usr_name1 + " register");
                                     console.log('them vao db thanh cong 1');
                                     socket.emit('register', true);
-                                    socket.broadcast.emit('register1', {"tf":"true", "user":{usr_name: usr_name1, password: password1, phone: phone1}});
+                                    socket.broadcast.emit('register1', {"tf":"true", "user":{usr_name: usr_name1, password: password1, phone: phone1, status : status1}});
                                     used = false;
                                 }
                                  
@@ -153,7 +165,6 @@ io.on('connection', function (socket) {
                   }else{
                     socket.emit('register', false);
                     used = true;
-                    used = false;
                   }
 
          }
@@ -228,22 +239,22 @@ socket.on('add user to room', function (username, bind_user) {
  
 socket.on('update_message', function (username1, message1){
 
-      collection.update({usr_name : socket.username},{$push:{message_usr_arr:{usrname: username1 , message: message1}}}, function(err, result){
+      // collection.update({usr_name : socket.username},{$push:{message_usr_arr:{usrname: username1 , message: message1}}}, function(err, result){
         
-         if (err) {
-                     console.log(err);
-                     // socket.emit('update_message', false);
-                     console.log('update that bai');
-                  }else{
-                    var cursor2 = collection.find();
-                    console.log('update thanh cong');
-                    cursor2.toArray(function(err, documents) {
-                      console.log('emit thanh cong');
-                    socket.emit("on_emit_message", documents);
-                  });
+      //    if (err) {
+      //                console.log(err);
+      //                // socket.emit('update_message', false);
+      //                console.log('update that bai');
+      //             }else{
+      //               var cursor2 = collection.find();
+      //               console.log('update thanh cong');
+      //               cursor2.toArray(function(err, documents) {
+      //                 console.log('emit thanh cong');
+      //               socket.emit("on_emit_message", documents);
+      //             });
                     
-                  }
-      });
+      //             }
+      // });
   });
 
 
@@ -283,23 +294,68 @@ socket.on('stop typing all room', function () {
     
   });
 
+
+  socket.on('escape', function () {
+    
+    collection.update({"phone" : socket.phone},{$set:{"status":false}}, function(err, result){
+        
+         if (err) {
+                     console.log(err);
+                     console.log('update that bai');
+                  }
+      });
+
+
+      console.log("user da off");
+
+      socket.broadcast.emit('user off', {
+       
+        phone: socket.phone,
+        username: socket.username,
+        status: false
+      });
+    
+  });
+
+
+
 socket.on('disconnect', function () {
     if (addedUser) {
       --numUsers;
       // echo globally that this client has left
+      console.log(socket.username + " left");
       socket.broadcast.emit('user left', {
         username: socket.username,
         numUsers: numUsers
       });
     }
   });
+
+// socket.on('disconnectUser', function () {
+//     if (addedUser) {
+//       --numUsers;
+//       // echo globally that this client has left
+//       console.log(socket.username + " left");
+
+
+//       socket.emit('usroff');
+
+//       socket.broadcast.emit('user left', {
+//         username: socket.username,
+//         numUsers: numUsers
+//       });
+//     }
+//   });
+
 function mallerthan0(){
 
       if(i <0) i = 0;
       if(j <0) j = 0;
       if(k <0) k = 0;
 }
+
  mallerthan0();
+
 socket.on('disconnect room', function (roomName) {
       socket.roomName = roomName;
       console.log("hello");
@@ -347,7 +403,33 @@ socket.on('disconnect room', function (roomName) {
       // }); 
   });
 
-
+socket.on("change pass",function (oldpass,newpass) {
+          console.log("use want to change password " +oldpass +" "+newpass);
+          var cursor = collection.find({"phone" : socket.phone, "password" : oldpass});
+          cursor.each(function (err, doc) {
+            if (err) {
+              console.log(err + "loi");
+            } else {
+               if(doc != null){
+                  collection.update({"phone" : socket.phone},{$set:{"password":newpass}}, function(err, result){
+          
+                             if (err) {
+                                         console.log(err);
+                                         socket.emit("change pass", false);
+                                      }else{
+                                         console.log('password has changed');
+                                         socket.emit("change pass", true);
+                                      }
+                          });
+               }else{
+                console.log("van loi")
+               }
+            }
+          
+           });
+          
+      
+  });
 
   // socket.on('disconnect', function () {
   //   if (addedUser) {
@@ -361,11 +443,46 @@ socket.on('disconnect room', function (roomName) {
   //   }
   // });
 
+
+// xu ly am thanh
            
- 
-      
+socket.on('client gui am thanh',function(data){
+    console.log(data);
+
+socket.broadcast.to(socket.bind_friend).emit('new record', {
+        username : socket.username,
+        record: data
+      });
+
+
+});
+
+
+// xu ly hinh anh
+socket.on('client gui image',function(data){
+    console.log(data);
+    // fs.readFile(data);
+socket.broadcast.to(socket.bind_friend).emit('new image', {
+        username : socket.username,
+        image: data
+      });
+});
+
+// tao file name
+  function fileName(id){
+    return "image/" + id.substring(2) + getMilis() + ".png"; 
+  }
+
+// lay milis
+   function getMilis(){
+      var date = new Date();
+      var milis = date.getTime();
+      return milis;
+   }   
 });
  
+
+
 http.listen(process.env.PORT ||3000, function(){
   console.log('listening on *:3000');
 });
