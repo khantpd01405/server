@@ -1,5 +1,5 @@
 // server_login.js
- 
+var gcm = require('node-gcm');
 var app = require('express')();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
@@ -53,7 +53,7 @@ io.on('connection', function (socket) {
                 socket.username = doc.usr_name;
                    if(doc.password == password){
                         socket.phone = phone;
-                        collection.update({"phone" : socket.phone},{$set:{"status":true}}, function(err, result){
+                        collection.update({"phone" : socket.phone},{$set:{"status": true , "socketId":socket.id}}, function(err, result){
         
                            if (err) {
                                        console.log(err);
@@ -84,12 +84,8 @@ io.on('connection', function (socket) {
                     if(log == true){
                     log = false;
                     cursor1.toArray(function(err, documents) {
-
-                              
                               socket.emit('login', true , documents);
                               console.log(phone + " login");
-                              
-                               
                             });
                      
                   }else{
@@ -109,7 +105,6 @@ io.on('connection', function (socket) {
  
 
 socket.on('user online', function(object){
-    console.log(object);
 
     socket.broadcast.emit("user online", object);
 });
@@ -118,7 +113,7 @@ socket.on('user online', function(object){
   socket.on('register', function (phone1, password1, usr_name1, status1,  messageArr1) {
     
     
-    var user = {usr_name: usr_name1, password: password1, phone: phone1 , status: status1, message_usr_arr : []};
+    var user = {usr_name: usr_name1, password: password1, phone: phone1 , status: status1, socketId: socket.id ,message_usr_arr : []};
 
 
     var cursor = collection.find({phone:phone1});
@@ -157,6 +152,7 @@ socket.on('user online', function(object){
                                   console.log(usr_name1 + " register");
                                     console.log('them vao db thanh cong 1');
                                     socket.emit('register', true);
+
                                     socket.broadcast.emit('register1', {"tf":"true", "user":{usr_name: usr_name1, password: password1, phone: phone1, status : status1}});
                                     used = false;
                                 }
@@ -186,7 +182,7 @@ socket.on('user online', function(object){
   
 
  socket.on('add user', function (username, bind_friend) {
-    if (addedUser) return;
+    // if (addedUser) return;
     socket.bind_friend = bind_friend;
     socket.join(socket.bind_friend);
     console.log(username + " login to chat");
@@ -210,7 +206,7 @@ socket.on('user online', function(object){
 
 
 socket.on('add user to room', function (username, bind_user) {
-    if (addedUser) return;
+    // if (addedUser) return;
     socket.bind_user = bind_user;
     socket.join(socket.bind_user);
     if(socket.bind_user == "Miền Bắc") i++; 
@@ -258,7 +254,7 @@ socket.on('update_message', function (username1, message1){
   });
 
 
-socket.on('typing', function () {
+socket.on('typing', function (socketIdFr) {
 
     socket.broadcast.to(socket.bind_friend).emit('typing', {
    
@@ -278,7 +274,7 @@ socket.on('typing all room', function () {
 
   });
 
- socket.on('stop typing', function () {
+ socket.on('stop typing', function (socketIdFr) {
 
     socket.broadcast.to(socket.bind_friend).emit('stop typing', {
       username: socket.username
@@ -323,11 +319,12 @@ socket.on('disconnect', function () {
     if (addedUser) {
       --numUsers;
       // echo globally that this client has left
-      console.log(socket.username + " left");
-      socket.broadcast.emit('user left', {
+socket.broadcast.emit('user left', {
         username: socket.username,
         numUsers: numUsers
       });
+      console.log(socket.username + " left");
+      
     }
   });
 
@@ -358,24 +355,35 @@ function mallerthan0(){
 
 socket.on('disconnect room', function (roomName) {
       socket.roomName = roomName;
-      console.log("hello");
-      mallerthan0();
-      if(socket.roomName == "Miền Bắc") --i;
-      if(socket.roomName == "Miền Trung") --j;
-      if(socket.roomName == "Miền Nam") --k;
+ //      console.log("hello");
+ //      mallerthan0();
+ //      if(socket.roomName == "Miền Bắc") --i;
+ //      if(socket.roomName == "Miền Trung") --j;
+ //      if(socket.roomName == "Miền Nam") --k;
 
- socket.broadcast.emit('joined', socket.roomName , i, j, k);
-    
+ // socket.broadcast.emit('joined', socket.roomName , i, j, k);
+  socket.broadcast.to(socket.bind_friend).emit('user left', {
+        username: socket.username,
+        numUsers: numUsers
+      });
+     socket.leave(socket.bind_friend);
   });
 
 
 
 
-  socket.on("new message",function (data) {
+  socket.on("new message",function (data , socketIdFr) {
 
     // socket.id_couple = id_couple;
      console.log("message from "+ socket.bind_friend);
     // socket.join(socket.id_couple);
+      socket.broadcast.to(socketIdFr).emit('push to user', {
+            username: socket.username,
+            phone: socket.phone,
+            socketId: socket.id,
+            message: data
+        });
+
   socket.broadcast.to(socket.bind_friend).emit('new message', {
         username : socket.username,
         message: data
@@ -446,11 +454,17 @@ socket.on("change pass",function (oldpass,newpass) {
 
 // xu ly am thanh
            
-socket.on('client gui am thanh',function(data){
+socket.on('client gui am thanh',function(data,socketIdFr){
     console.log(data);
-
-socket.broadcast.to(socket.bind_friend).emit('new record', {
-        username : socket.username,
+    var message1 = "gui 1 am thanh";
+socket.broadcast.to(socketIdFr).emit('push to user', {
+        username: socket.username,
+        phone: socket.phone,
+        socketId: socket.id,
+        message: message1
+        });
+socket.broadcast.to(socketIdFr).emit('new record', {
+        username: socket.username,
         record: data
       });
 
@@ -459,11 +473,18 @@ socket.broadcast.to(socket.bind_friend).emit('new record', {
 
 
 // xu ly hinh anh
-socket.on('client gui image',function(data){
+socket.on('client gui image',function(data,socketIdFr){
     console.log(data);
     // fs.readFile(data);
-socket.broadcast.to(socket.bind_friend).emit('new image', {
-        username : socket.username,
+    var message1 = "gui 1 hinh anh";
+    socket.broadcast.to(socketIdFr).emit('push to user', {
+        username: socket.username,
+        phone: socket.phone,
+        socketId: socket.id,
+        message: message1
+        });
+socket.broadcast.to(socketIdFr).emit('new image', {
+        username: socket.username,
         image: data
       });
 });
@@ -480,8 +501,33 @@ socket.broadcast.to(socket.bind_friend).emit('new image', {
       return milis;
    }   
 });
- 
 
+
+function pushnotification(){
+  var message = new gcm.Message();
+ 
+// Add notification payload as key value
+message.addNotification('title', 'Alert!!!');
+message.addNotification('body', 'Abnormal data access');
+message.addNotification('icon', 'ic_launcher');
+ 
+ 
+// Set up the sender with you API key
+var sender = new gcm.Sender('AIzaSyCyzKr6Eib21eyLOvMp6IdJYXHJtvp-Vg8');
+ 
+// Add the registration tokens of the devices you want to send to
+var registrationTokens = [];
+registrationTokens.push('e9UgBn328CI:APA91bFs_xgz9yLfZrgl-czcVBHlHE9buz1m63rM4l-sYyYa9Xzl-0Lpz5maF-s6n-ztfZGVxqxiAaIiPqMaJpDyiBQK5QT_1We-B4_0x5DHFBxC0_iQN017bhqo8vpPcMJ3tHT_zomU');
+ 
+ 
+sender.sendNoRetry(message, { registrationTokens: registrationTokens }, function(err, response) {
+  if(err) console.error(err);
+  else    console.log(response);
+});
+
+}
+
+ 
 
 http.listen(process.env.PORT ||3000, function(){
   console.log('listening on *:3000');
