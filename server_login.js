@@ -1,5 +1,5 @@
 // server_login.js
-var gcm = require('node-gcm');
+
 var app = require('express')();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
@@ -15,6 +15,7 @@ var k =0;
 var used = false;
 var log = false;
 var log1 = false;
+var log2 = false;
 MongoClient.connect(url, function (err, db) {
   if (err) {
     console.log('Unable to connect to the mongoDB server. Error:', err);
@@ -53,11 +54,12 @@ io.on('connection', function (socket) {
                 socket.username = doc.usr_name;
                    if(doc.password == password){
                         socket.phone = phone;
+                        socket.image_profile = doc.image_profile;
                         collection.update({"phone" : socket.phone},{$set:{"status": true , "socketId":socket.id}}, function(err, result){
         
                            if (err) {
                                        console.log(err);
-                                       console.log('update that bai');
+                                       console.log('update that bai'); 
                                     }else{
                                       
                                     }
@@ -69,7 +71,8 @@ io.on('connection', function (socket) {
                         log = false;
                    }
                    log1 = true;
-                   callback(null,1);
+               }else{
+                log1 = false;
                }
                callback(null,1);
             }
@@ -78,7 +81,7 @@ io.on('connection', function (socket) {
            
         },
         function(callback){
-             callback(null,2);
+               callback(null,2);
              if(log1 == true){
                   log1 = false;
                     if(log == true){
@@ -97,15 +100,52 @@ io.on('connection', function (socket) {
                 socket.emit('login1', false);
                 log1 = true;
              }
-             
+           
          
         }
       ]);
   });
  
+ socket.on('logged', function(phone, username){
+  var cursor1 = collection.find();   
+  socket.username = username;
+  
+  socket.phone = phone;
+  console.log(phone + " login");
+  var cursor = collection.find({phone:phone});
+
+cursor.each(function (err, doc) {
+                
+            if (err) {
+              console.log(err);
+              socket.emit('login', false);
+            } else {
+              if(doc != null){
+              socket.image_profile = doc.image_profile;
+              
+            }
+            }
+          
+           });
+
+  collection.update({"phone" : socket.phone},{$set:{"status": true , "socketId":socket.id}}, function(err, result){
+        
+                           if (err) {
+                                       console.log(err);
+                                       console.log('update that bai');
+                                    }else{
+                                      
+                                    }
+                        });
+    cursor1.toArray(function(err, documents) {
+                              
+                              socket.emit('logged', documents);
+
+                            });
+});
+
 
 socket.on('user online', function(object){
-
     socket.broadcast.emit("user online", object);
 });
 
@@ -113,7 +153,7 @@ socket.on('user online', function(object){
   socket.on('register', function (phone1, password1, usr_name1, status1,  messageArr1) {
     
     
-    var user = {usr_name: usr_name1, password: password1, phone: phone1 , status: status1, socketId: socket.id ,message_usr_arr : []};
+    var user = {usr_name: usr_name1, password: password1, phone: phone1 , status: status1, socketId: socket.id , image_profile: null, message_usr_arr : []};
 
 
     var cursor = collection.find({phone:phone1});
@@ -126,14 +166,8 @@ socket.on('user online', function(object){
                         socket.emit('register', false);
                          
                       } else {
-                         if(doc == null){
-                          
-                          used = true;
-                          
-                         }else{
-                          used = false;
-                            
-                         }
+                         if(doc == null) used = true;
+                         else used = false;
                          callback(null,1);
                       } 
                      
@@ -152,8 +186,7 @@ socket.on('user online', function(object){
                                   console.log(usr_name1 + " register");
                                     console.log('them vao db thanh cong 1');
                                     socket.emit('register', true);
-
-                                    socket.broadcast.emit('register1', {"tf":"true", "user":{usr_name: usr_name1, password: password1, phone: phone1, status : status1}});
+                                    socket.broadcast.emit('register1', {"tf":"true", "user":{usr_name: usr_name1, phone: phone1, status: status1, image_profile: null, socketId: socket.id}});
                                     used = false;
                                 }
                                  
@@ -254,11 +287,12 @@ socket.on('update_message', function (username1, message1){
   });
 
 
-socket.on('typing', function (socketIdFr) {
+socket.on('typing', function (socketIdFr, profile) {
 
     socket.broadcast.to(socket.bind_friend).emit('typing', {
    
-      username: socket.username
+      username: socket.username,
+      profile: profile
    
     });
 
@@ -303,12 +337,12 @@ socket.on('stop typing all room', function () {
 
 
       console.log("user da off");
-
       socket.broadcast.emit('user off', {
        
         phone: socket.phone,
         username: socket.username,
-        status: false
+        status: false,
+        profile: socket.image_profile 
       });
     
   });
@@ -367,12 +401,12 @@ socket.on('disconnect room', function (roomName) {
         numUsers: numUsers
       });
      socket.leave(socket.bind_friend);
+     socket.leave(socket.bind_user);
   });
 
 
 
-
-  socket.on("new message",function (data , socketIdFr) {
+  socket.on("new message",function (data , socketIdFr, profile) {
 
     // socket.id_couple = id_couple;
      console.log("message from "+ socket.bind_friend);
@@ -385,7 +419,8 @@ socket.on('disconnect room', function (roomName) {
         });
 
   socket.broadcast.to(socket.bind_friend).emit('new message', {
-        username : socket.username,
+        username: socket.username,
+        profile: profile,
         message: data
       });
 
@@ -412,14 +447,33 @@ socket.on('disconnect room', function (roomName) {
   });
 
 socket.on("change pass",function (oldpass,newpass) {
+  var tr = null;
           console.log("use want to change password " +oldpass +" "+newpass);
           var cursor = collection.find({"phone" : socket.phone, "password" : oldpass});
+          async.series([
+
+        function(callback){
           cursor.each(function (err, doc) {
             if (err) {
               console.log(err + "loi");
             } else {
-               if(doc != null){
-                  collection.update({"phone" : socket.phone},{$set:{"password":newpass}}, function(err, result){
+               if(doc != null){ 
+                tr = true;
+                
+                  
+               }else{
+                tr = false;
+               }
+               callback(null,1);
+            }
+          
+           });
+        },
+
+        function(callback){
+          callback(null,2);
+          if(tr == true){
+                  collection.update({"phone": socket.phone},{$set:{"password":newpass}}, function(err, result){
           
                              if (err) {
                                          console.log(err);
@@ -429,16 +483,16 @@ socket.on("change pass",function (oldpass,newpass) {
                                          socket.emit("change pass", true);
                                       }
                           });
-               }else{
-                console.log("van loi")
+          }
+          else if(tr == false){
+                socket.emit("change pass", false);
+                console.log("van loi");
                }
-            }
-          
-           });
-          
+      }
+      ]);
+            });
+        
       
-  });
-
   // socket.on('disconnect', function () {
   //   if (addedUser) {
   //     --numUsers;
@@ -473,7 +527,7 @@ socket.broadcast.to(socketIdFr).emit('new record', {
 
 
 // xu ly hinh anh
-socket.on('client gui image',function(data,socketIdFr){
+socket.on('client gui image',function(data,socketIdFr,profile){
     console.log(data);
     // fs.readFile(data);
     var message1 = "gui 1 hinh anh";
@@ -485,9 +539,30 @@ socket.on('client gui image',function(data,socketIdFr){
         });
 socket.broadcast.to(socketIdFr).emit('new image', {
         username: socket.username,
+        profile: profile,
         image: data
       });
 });
+
+
+// xu ly hinh anh
+socket.on('client gui image dai dien',function(data, object){
+
+collection.update({"phone" : socket.phone},{$set:{"image_profile": data}}, function(err, result){
+        
+                           if (err) {
+                                       console.log(err);
+                                       
+                                    }else{
+                                      console.log('cap nhap hinh dai dien thanh cong');
+
+                                      }
+                        });
+      socket.image_profile = data;
+      socket.emit('update_image', data);
+      socket.broadcast.emit('client gui image dai dien', object);
+});
+
 
 // tao file name
   function fileName(id){
@@ -503,29 +578,29 @@ socket.broadcast.to(socketIdFr).emit('new image', {
 });
 
 
-function pushnotification(){
-  var message = new gcm.Message();
+// function pushnotification(){
+//   var message = new gcm.Message();
  
-// Add notification payload as key value
-message.addNotification('title', 'Alert!!!');
-message.addNotification('body', 'Abnormal data access');
-message.addNotification('icon', 'ic_launcher');
- 
- 
-// Set up the sender with you API key
-var sender = new gcm.Sender('AIzaSyCyzKr6Eib21eyLOvMp6IdJYXHJtvp-Vg8');
- 
-// Add the registration tokens of the devices you want to send to
-var registrationTokens = [];
-registrationTokens.push('e9UgBn328CI:APA91bFs_xgz9yLfZrgl-czcVBHlHE9buz1m63rM4l-sYyYa9Xzl-0Lpz5maF-s6n-ztfZGVxqxiAaIiPqMaJpDyiBQK5QT_1We-B4_0x5DHFBxC0_iQN017bhqo8vpPcMJ3tHT_zomU');
+// // Add notification payload as key value
+// message.addNotification('title', 'Alert!!!');
+// message.addNotification('body', 'Abnormal data access');
+// message.addNotification('icon', 'ic_launcher');
  
  
-sender.sendNoRetry(message, { registrationTokens: registrationTokens }, function(err, response) {
-  if(err) console.error(err);
-  else    console.log(response);
-});
+// // Set up the sender with you API key
+// var sender = new gcm.Sender('AIzaSyCyzKr6Eib21eyLOvMp6IdJYXHJtvp-Vg8');
+ 
+// // Add the registration tokens of the devices you want to send to
+// var registrationTokens = [];
+// registrationTokens.push('e9UgBn328CI:APA91bFs_xgz9yLfZrgl-czcVBHlHE9buz1m63rM4l-sYyYa9Xzl-0Lpz5maF-s6n-ztfZGVxqxiAaIiPqMaJpDyiBQK5QT_1We-B4_0x5DHFBxC0_iQN017bhqo8vpPcMJ3tHT_zomU');
+ 
+ 
+// sender.sendNoRetry(message, { registrationTokens: registrationTokens }, function(err, response) {
+//   if(err) console.error(err);
+//   else    console.log(response);
+// });
 
-}
+// }
 
  
 
