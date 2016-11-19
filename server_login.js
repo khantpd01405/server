@@ -150,10 +150,10 @@ socket.on('user online', function(object){
 });
 
 
-  socket.on('register', function (phone1, password1, usr_name1, status1,  messageArr1) {
+  socket.on('register', function (phone1, password1, usr_name1, status1) {
     
     
-    var user = {usr_name: usr_name1, password: password1, phone: phone1 , status: status1, socketId: socket.id , image_profile: null, message_usr_arr : []};
+    var user = {usr_name: usr_name1, password: password1, phone: phone1 , status: status1, socketId: socket.id , image_profile: null, id_message: {}};
 
 
     var cursor = collection.find({phone:phone1});
@@ -214,7 +214,7 @@ socket.on('user online', function(object){
 
   
 
- socket.on('add user', function (username, bind_friend) {
+ socket.on('add user', function (username, bind_friend, profile) {
     // if (addedUser) return;
     socket.bind_friend = bind_friend;
     socket.join(socket.bind_friend);
@@ -233,6 +233,7 @@ socket.on('user online', function(object){
     socket.broadcast.to(socket.bind_friend).emit('user joined', {
       username: socket.username,
       string: socket.bind_friend,
+      profile: profile,
       numUsers: numUsers
     });
   });
@@ -266,24 +267,50 @@ socket.on('add user to room', function (username, bind_user) {
 
 
  
-socket.on('update_message', function (username1, message1){
+socket.on('update_message', function (username1, message, username_friend1, currentDateandTime1, profile, profile_friend1){
+      // var id_message = socketId_friend;
+      var update = { $push : {} };
+          update.$push['id_message.' + socket.bind_friend] = {usrname: username1 ,message: message , username_friend: username_friend1, date_time: currentDateandTime1, image_profile: profile, profile_friend: profile_friend1};
 
-      // collection.update({usr_name : socket.username},{$push:{message_usr_arr:{usrname: username1 , message: message1}}}, function(err, result){
+      console.log("update message");
+      collection.update({usr_name : socket.username},update, function(err, result){
         
-      //    if (err) {
-      //                console.log(err);
-      //                // socket.emit('update_message', false);
-      //                console.log('update that bai');
-      //             }else{
-      //               var cursor2 = collection.find();
-      //               console.log('update thanh cong');
-      //               cursor2.toArray(function(err, documents) {
-      //                 console.log('emit thanh cong');
-      //               socket.emit("on_emit_message", documents);
-      //             });
+         if (err) {
+                     console.log(err);
+                     // socket.emit('update_message', false);
+                     console.log('update that bai');
+                  }else{
+                    var cursor2 = collection.find({usr_name : socket.username});
+                    cursor2.toArray(function(err, documents) {
+                    socket.emit("on_emit_message", documents);
+
+
+                    // to friend
+                    update.$push['id_message.' + socket.bind_friend] = {usrname: username1 ,message: message , username_friend: socket.username, date_time: currentDateandTime1, image_profile: profile_friend1, profile_friend: profile};
+                    collection.update({usr_name : username_friend1},update, function(err, result){
+        
+                        if (err) {
+                         console.log(err);
+                         // socket.emit('update_message', false);
+                         console.log('update that bai');
+                          }else{
+                            var cursor3 = collection.find({usr_name : username_friend1});
+                            cursor3.toArray(function(err, documents){
+                              console.log('emit thanh cong' + documents);
+                            socket.broadcast.to(socket.idFriend).emit("on_emit_message", documents);
+                          });
                     
-      //             }
-      // });
+                        }
+                    });
+
+
+
+                  });
+                    
+                  }
+      });
+
+
   });
 
 
@@ -406,8 +433,8 @@ socket.on('disconnect room', function (roomName) {
 
 
 
-  socket.on("new message",function (data , socketIdFr, profile) {
-
+  socket.on("new message",function (data , socketIdFr, profile, byteImage) {
+      socket.idFriend = socketIdFr;
     // socket.id_couple = id_couple;
      console.log("message from "+ socket.bind_friend);
     // socket.join(socket.id_couple);
@@ -415,12 +442,13 @@ socket.on('disconnect room', function (roomName) {
             username: socket.username,
             phone: socket.phone,
             socketId: socket.id,
+            profile: profile,
             message: data
         });
 
   socket.broadcast.to(socket.bind_friend).emit('new message', {
         username: socket.username,
-        profile: profile,
+        profile: byteImage,
         message: data
       });
 
